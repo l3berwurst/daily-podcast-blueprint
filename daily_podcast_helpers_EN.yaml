@@ -1,0 +1,40 @@
+# Home Assistant helpers for Daily Podcast – Version 6.4
+#
+# This file can be used as a Home Assistant package, for example:
+# /config/packages/daily_podcast_helpers_EN.yaml
+#
+# Required configuration in configuration.yaml:
+#
+# homeassistant:
+#   packages: !include_dir_named packages
+#
+# Alternatively, merge the input_text, input_number, and input_boolean
+# sections below into the corresponding existing sections in
+# configuration.yaml.
+
+input_text:
+  dayly_podcast_mp3_url:
+    name: Daily Podcast MP3 URL
+    icon: mdi:link-variant
+    max: 255
+    mode: text
+
+input_number:
+  tagesschau_99sek_volume:
+    name: Daily Podcast Sonos Volume
+    icon: mdi:volume-high
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: slider
+    initial: 30
+
+input_boolean:
+  tagesschau_99sek_podcast_playing:
+    name: Daily Podcast Is Playing
+    icon: mdi:podcast
+
+  tagesschau_99sek_1x_morgens_merker:
+    name: Daily Podcast Already Played Automatically Today
+    icon: mdi:calendar-check
