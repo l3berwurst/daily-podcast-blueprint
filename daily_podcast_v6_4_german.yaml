@@ -1,0 +1,433 @@
+blueprint:
+  name: Daily Podcast auf Media Player – Version 6.4
+  description: >-
+    Spielt die aktuelle Podcast-MP3 über frei konfigurierbare regelbasierte
+    Auslöser oder einen separaten Handtrigger ab. Die regelbasierten Auslöser
+    beachten zusätzliche Bedingungen und optional eine Begrenzung auf einmal
+    pro Tag. Der Handtrigger umgeht diese Bedingungen und die Tagesbegrenzung
+    vollständig. Bei einem Sonos-Player können Snapshot, Podcast-Lautstärke
+    und Restore verwendet werden.
+  domain: automation
+  homeassistant:
+    min_version: 2024.10.0
+
+  input:
+    start_und_bedingungen:
+      name: Startauslöser und Bedingungen
+      description: >-
+        Konfiguriere regelbasierte Auslöser sowie einen separaten Handtrigger,
+        der jederzeit unabhängig von Bedingungen und Tagesbegrenzung abspielt.
+      input:
+        playback_triggers:
+          name: Regelbasierte Podcast-Startauslöser
+          description: >-
+            Füge einen oder mehrere beliebige Home-Assistant-Auslöser hinzu.
+            Diese Auslöser beachten die zusätzlichen Wiedergabebedingungen.
+            Beispiele sind Status, Sensorwerte, Zeitpunkte, Bewegungsmelder,
+            Kalenderereignisse oder NFC-Tags.
+          default:
+            - trigger: numeric_state
+              entity_id:
+                - sensor.clagehomeserver_dsxtouchserver_heater_status_power
+              below: 1
+              for:
+                hours: 0
+                minutes: 0
+                seconds: 20
+          selector:
+            trigger: {}
+
+        playback_conditions:
+          name: Zusätzliche Bedingungen für regelbasierte Wiedergabe
+          description: >-
+            Optional. Diese Bedingungen gelten ausschließlich für die
+            regelbasierten Podcast-Startauslöser. Der Handtrigger ignoriert
+            alle hier eingetragenen Bedingungen vollständig.
+          default:
+            - condition: time
+              after: "05:30:00"
+              before: "06:30:00"
+          selector:
+            condition: {}
+
+        manual_trigger:
+          name: Handtrigger – Bedingungen und Tagesbegrenzung umgehen
+          description: >-
+            Dieser Binärsensor startet den Podcast ausschließlich beim Wechsel
+            auf EIN. Zusätzliche Bedingungen, Zeitfenster und die Begrenzung
+            auf einmal pro Tag werden nicht geprüft. Der spätere Wechsel auf
+            AUS löst keine zweite Automationsausführung aus.
+          default: binary_sensor.c5_bad_knx_haas_podcast_spielen
+          selector:
+            entity:
+              filter:
+                - domain: binary_sensor
+
+    tagesbegrenzung:
+      name: Regelbasierte Starts pro Tag
+      description: >-
+        Entscheide, ob die regelbasierten Startauslöser den Podcast höchstens
+        einmal oder beliebig oft pro Tag starten dürfen. Der Handtrigger wird
+        durch diese Auswahl nie eingeschränkt und verändert den Tagesmerker nicht.
+      input:
+        daily_start_policy:
+          name: Anzahl regelbasierter Starts
+          description: >-
+            „Einmal pro Tag“ prüft und setzt den unten gewählten Tagesmerker.
+            „Unbegrenzt pro Tag“ ignoriert den Tagesmerker vollständig.
+            Der Handtrigger umgeht beide Varianten.
+          default: once
+          selector:
+            select:
+              mode: list
+              options:
+                - label: Einmal pro Tag
+                  value: once
+                - label: Unbegrenzt pro Tag
+                  value: unlimited
+
+        daily_marker:
+          name: Tagesmerker für „Einmal pro Tag“
+          description: >-
+            Dieser input_boolean wird ausschließlich bei „Einmal pro Tag“
+            geprüft, nach erfolgreichem regelbasiertem Start gesetzt und zur
+            Reset-Zeit ausgeschaltet. Bei „Unbegrenzt pro Tag“ und beim
+            Handtrigger wird er vollständig ignoriert.
+          default: input_boolean.tagesschau_99sek_1x_morgens_merker
+          selector:
+            entity:
+              filter:
+                - domain: input_boolean
+
+    podcast_ausgabe:
+      name: Media Player und Helfer
+      description: >-
+        Wähle den Media Player und lege fest, ob die Sonos-Snapshotfunktion
+        verwendet werden soll.
+      input:
+        media_player:
+          name: Media Player für den Podcast
+          description: >-
+            Auf diesem Media Player wird die Podcast-MP3 abgespielt.
+            Vorschlagswert ist dein Sonos im Bad.
+          default: media_player.bad
+          selector:
+            entity:
+              filter:
+                - domain: media_player
+
+        sonos_mode:
+          name: Sonos-Player
+          description: >-
+            Nein: Die MP3 wird nur abgespielt – ohne Snapshot, Restore oder
+            Lautstärkeänderung. Ja ohne Gruppe: Sonos-Snapshot und Restore ohne
+            Gruppenzusammensetzung. Ja mit Gruppe: Sonos-Snapshot und Restore
+            einschließlich der Sonos-Gruppe. Wähle eine Ja-Option nur für eine
+            Entität der Sonos-Integration.
+          default: sonos_group
+          selector:
+            select:
+              mode: list
+              options:
+                - label: Nein – nur abspielen
+                  value: none
+                - label: Ja – Snapshot ohne Gruppe
+                  value: sonos
+                - label: Ja – Snapshot mit Gruppe
+                  value: sonos_group
+
+        volume_helper:
+          name: Sonos-Lautstärke
+          description: >-
+            Dieser input_number-Helfer bestimmt die Lautstärke in Prozent.
+            Er wird ausschließlich verwendet, wenn „Sonos-Player“ aktiviert ist.
+          default: input_number.tagesschau_99sek_volume
+          selector:
+            entity:
+              filter:
+                - domain: input_number
+
+        mp3_url_helper:
+          name: Helfer für die aktuelle MP3-Adresse
+          description: >-
+            Dieser input_text-Helfer enthält die vom Pyscript ermittelte
+            direkte MP3-Adresse.
+          default: input_text.dayly_podcast_mp3_url
+          selector:
+            entity:
+              filter:
+                - domain: input_text
+
+        playing_helper:
+          name: Merker „Podcast läuft“
+          description: >-
+            Wird nach bestätigtem Wiedergabestart eingeschaltet und nach Ende
+            oder Timeout wieder ausgeschaltet.
+          default: input_boolean.tagesschau_99sek_podcast_playing
+          selector:
+            entity:
+              filter:
+                - domain: input_boolean
+
+    rss_update:
+      name: RSS-Feed und Aktualisierung
+      description: >-
+        Lege den RSS-Feed und die tägliche Aktualisierungszeit fest.
+      input:
+        rss_url:
+          name: RSS-Feed-URL
+          description: >-
+            Adresse des Podcast-RSS-Feeds. Das Pyscript übernimmt die MP3-URL
+            aus dem ersten Element.
+          default: "https://www.tagesschau.de/multimedia/sendung/tagesschau_in_100_sekunden/podcast-ts100-audio-100~podcast.xml"
+          selector:
+            text:
+              type: url
+              multiline: false
+
+        update_time:
+          name: Tägliche Uhrzeit für das RSS-Update
+          description: >-
+            Zu dieser Uhrzeit wird die aktuelle MP3-Adresse aus dem RSS-Feed
+            geladen.
+          default: "04:00:00"
+          selector:
+            time:
+
+    wiedergabe:
+      name: Wiedergabe und Timeouts
+      description: >-
+        Stelle ein, wie lange auf den Start und das Ende der Wiedergabe
+        gewartet werden soll.
+      input:
+        playback_start_timeout:
+          name: Wartezeit auf den Wiedergabestart
+          description: >-
+            Innerhalb dieser Zeit muss der Media Player den Zustand „playing“
+            erreichen. Erst danach wird bei einem regelbasierten Start und
+            „Einmal pro Tag“ der Tagesmerker gesetzt.
+          default:
+            hours: 0
+            minutes: 0
+            seconds: 10
+          selector:
+            duration:
+
+        max_playback_duration:
+          name: Maximale Podcast-Wiedergabezeit
+          description: >-
+            Nach dieser Zeit wird nicht länger auf das Ende gewartet.
+            Bei aktiviertem Sonos-Modus wird anschließend der Snapshot
+            wiederhergestellt.
+          default:
+            hours: 0
+            minutes: 3
+            seconds: 0
+          selector:
+            duration:
+
+variables:
+  media_player_entity: !input media_player
+  mp3_url_helper_entity: !input mp3_url_helper
+  volume_helper_entity: !input volume_helper
+  sonos_mode_value: !input sonos_mode
+  use_sonos_snapshot_value: >-
+    {{ sonos_mode_value in ['sonos', 'sonos_group'] }}
+  sonos_with_group_value: >-
+    {{ sonos_mode_value == 'sonos_group' }}
+  daily_start_policy_value: !input daily_start_policy
+  daily_marker_entity: !input daily_marker
+
+  trigger_id_value: >-
+    {% if trigger is defined and trigger.id is defined %}
+      {{ trigger.id }}
+    {% else %}
+      {{ '' }}
+    {% endif %}
+
+  daily_limit_enabled: >-
+    {{ daily_start_policy_value == 'once' }}
+
+  is_manual_bypass: >-
+    {% set current_trigger_id = trigger_id_value | trim %}
+    {{ current_trigger_id == ''
+       or current_trigger_id ==
+          '__daily_podcast_v6_2_manual_bypass_trigger__' }}
+
+triggers:
+  - trigger: state
+    entity_id: !input manual_trigger
+    to: "on"
+    id: "__daily_podcast_v6_2_manual_bypass_trigger__"
+
+  - triggers: !input playback_triggers
+
+  - trigger: time
+    at: "00:00:01"
+    id: "__daily_podcast_v6_internal_marker_reset__"
+
+  - trigger: time
+    at: !input update_time
+    id: "__daily_podcast_v6_internal_rss_update__"
+
+conditions: []
+
+actions:
+  - choose:
+      - alias: Tagesmerker zurücksetzen
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger_id_value | trim ==
+                 '__daily_podcast_v6_internal_marker_reset__' }}
+        sequence:
+          - alias: Nur im Modus „Einmal pro Tag“ zurücksetzen
+            if:
+              - condition: template
+                value_template: "{{ daily_limit_enabled }}"
+            then:
+              - action: input_boolean.turn_off
+                continue_on_error: true
+                target:
+                  entity_id: "{{ daily_marker_entity }}"
+
+      - alias: Aktuelle MP3-Adresse aus dem RSS-Feed laden
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger_id_value | trim ==
+                 '__daily_podcast_v6_internal_rss_update__' }}
+        sequence:
+          - action: pyscript.update_tagesschau_mp3_url
+            continue_on_error: true
+            data:
+              rss_url: !input rss_url
+              mp3_url_helper: !input mp3_url_helper
+
+    default:
+      - alias: Zusätzliche Bedingungen nur bei regelbasiertem Start prüfen
+        condition: or
+        conditions:
+          - condition: template
+            value_template: "{{ is_manual_bypass }}"
+          - condition: and
+            conditions: !input playback_conditions
+
+      - alias: Tagesbegrenzung nur bei regelbasiertem Start prüfen
+        condition: template
+        value_template: >-
+          {{ is_manual_bypass
+             or not daily_limit_enabled
+             or is_state(daily_marker_entity, 'off') }}
+
+      - alias: Nur bei gültiger MP3-Adresse fortfahren
+        condition: template
+        value_template: >-
+          {% set url = states(mp3_url_helper_entity) %}
+          {{ url not in ['', 'unknown', 'unavailable', 'none'] and
+             url.startswith(('http://', 'https://')) }}
+
+      - alias: Nur bei verfügbarem Media Player fortfahren
+        condition: template
+        value_template: >-
+          {{ states(media_player_entity) not in
+             ['unknown', 'unavailable', 'none'] }}
+
+      - alias: Hängengebliebenen Podcast-Merker bereinigen
+        action: input_boolean.turn_off
+        continue_on_error: true
+        target:
+          entity_id: !input playing_helper
+
+      - alias: Bei Sonos einen Snapshot erstellen
+        if:
+          - condition: template
+            value_template: "{{ use_sonos_snapshot_value }}"
+        then:
+          - action: sonos.snapshot
+            continue_on_error: true
+            target:
+              entity_id: !input media_player
+            data:
+              with_group: "{{ sonos_with_group_value }}"
+
+          - alias: Podcast-Lautstärke nur bei Sonos einstellen
+            action: media_player.volume_set
+            continue_on_error: true
+            target:
+              entity_id: !input media_player
+            data:
+              volume_level: >-
+                {% set volume =
+                   (states(volume_helper_entity) | float(30)) / 100 %}
+                {{ [0, [volume, 1] | min] | max | round(2) }}
+
+          - delay:
+              milliseconds: 300
+
+      - alias: Podcast-MP3 abspielen
+        action: media_player.play_media
+        continue_on_error: true
+        target:
+          entity_id: !input media_player
+        data:
+          media_content_id: "{{ states(mp3_url_helper_entity) }}"
+          media_content_type: music
+
+      - alias: Auf bestätigten Wiedergabestart warten
+        wait_template: "{{ is_state(media_player_entity, 'playing') }}"
+        timeout: !input playback_start_timeout
+        continue_on_timeout: true
+
+      - alias: Nur nach erfolgreichem Start Merker setzen und auf Ende warten
+        if:
+          - condition: template
+            value_template: "{{ wait.completed }}"
+        then:
+          - alias: Tagesmerker nur bei regelbasiertem Start setzen
+            if:
+              - condition: template
+                value_template: >-
+                  {{ not is_manual_bypass and daily_limit_enabled }}
+            then:
+              - action: input_boolean.turn_on
+                continue_on_error: true
+                target:
+                  entity_id: "{{ daily_marker_entity }}"
+
+          - alias: Merker „Podcast läuft“ einschalten
+            action: input_boolean.turn_on
+            continue_on_error: true
+            target:
+              entity_id: !input playing_helper
+
+          - alias: Auf Ende, Pause, Stopp oder Timeout warten
+            wait_for_trigger:
+              - trigger: state
+                entity_id: !input media_player
+                from: "playing"
+                for:
+                  seconds: 1
+            timeout: !input max_playback_duration
+            continue_on_timeout: true
+
+      - alias: Merker „Podcast läuft“ ausschalten
+        action: input_boolean.turn_off
+        continue_on_error: true
+        target:
+          entity_id: !input playing_helper
+
+      - alias: Sonos-Snapshot nur bei aktivierter Sonos-Option wiederherstellen
+        if:
+          - condition: template
+            value_template: "{{ use_sonos_snapshot_value }}"
+        then:
+          - action: sonos.restore
+            continue_on_error: true
+            target:
+              entity_id: !input media_player
+            data:
+              with_group: "{{ sonos_with_group_value }}"
+
+mode: single
+max_exceeded: warning
